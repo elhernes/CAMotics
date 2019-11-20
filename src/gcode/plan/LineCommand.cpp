@@ -36,11 +36,11 @@ using namespace cb;
 using namespace std;
 
 
-LineCommand::LineCommand(uint64_t id, const Axes &start, const Axes &end,
-                         double feed, bool rapid, bool seeking, bool first,
+LineCommand::LineCommand(const Axes &start, const Axes &end, double feed,
+                         bool rapid, bool seeking, bool first,
                          const PlannerConfig &config) :
-  PlannerCommand(id), feed(feed), start(start), target(end), rapid(rapid),
-  seeking(seeking), first(first) {computeLimits(config);}
+  feed(feed), start(start), target(end), rapid(rapid), seeking(seeking),
+  first(first) {computeLimits(config);}
 
 
 double LineCommand::getTime() const {
@@ -81,6 +81,9 @@ bool LineCommand::merge(const LineCommand &lc, const PlannerConfig &config,
                         double speed) {
   // Check if merge is possible
   if (rapid != lc.rapid || !canMerge() || !lc.canMerge()) return false;
+
+  if (config.maxMergeLength < lc.length || config.maxMergeLength < length)
+    return false;
 
   // Check if too many merges have already been made
   if (63 < merged.size()) return false;
@@ -132,7 +135,8 @@ void LineCommand::restart(const Axes &position, const PlannerConfig &config) {
 void LineCommand::insert(JSON::Sink &sink) const {
   sink.insertDict("target", true);
   for (unsigned i = 0; i < target.getSize(); i++)
-    if (unit[i]) sink.insert(Axes::toAxisName(i, true), target[i]);
+    if (target[i] != start[i])
+      sink.insert(Axes::toAxisName(i, true), target[i]);
   sink.endDict();
 
   sink.insert("entry-vel", entryVel);

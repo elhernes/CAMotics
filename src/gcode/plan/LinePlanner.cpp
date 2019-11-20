@@ -109,8 +109,10 @@ uint64_t LinePlanner::next(JSON::Sink &sink) {
   out.push_back(cmds.pop_front());
   lastExitVel = cmd->getExitVelocity();
 
-  time += cmd->getTime();
-  distance += cmd->getLength();
+  if (!cmd->isSeeking()) {
+    time += cmd->getTime();
+    distance += cmd->getLength();
+  }
 
   return cmd->getID();
 }
@@ -195,7 +197,7 @@ void LinePlanner::start() {
 
 void LinePlanner::end() {
   MachineState::end();
-  push(new EndCommand(getNextID()));
+  push(new EndCommand);
 }
 
 
@@ -227,9 +229,11 @@ void LinePlanner::setPathMode(path_mode_t mode, double motionBlending,
   config.pathMode = mode;
 
   if (mode == CONTINUOUS_MODE) {
-    // Note, naiveCAM < 0 means keep previous value
-    if (0 <= naiveCAM) config.maxMergeError = naiveCAM;
-    // TODO Motion blending
+    // Note, value < 0 means keep previous value
+    if (0 <= naiveCAM)
+      config.maxMergeError =
+        naiveCAM < config.minMergeError ? config.minMergeError : naiveCAM;
+    if (0 <= motionBlending) config.maxBlendError = motionBlending;
   }
 }
 
@@ -239,13 +243,13 @@ void LinePlanner::changeTool(unsigned tool) {pushSetCommand("tool", tool);}
 
 void LinePlanner::input(port_t port, input_mode_t mode, double timeout) {
   MachineState::input(port, mode, timeout);
-  push(new InputCommand(getNextID(), port, mode, timeout));
+  push(new InputCommand(port, mode, timeout));
 }
 
 
 void LinePlanner::seek(port_t port, bool active, bool error) {
   MachineState::seek(port, active, error);
-  push(new SeekCommand(getNextID(), port, active, error));
+  push(new SeekCommand(port, active, error));
   seeking = true;
 }
 
@@ -253,13 +257,13 @@ void LinePlanner::seek(port_t port, bool active, bool error) {
 
 void LinePlanner::output(port_t port, double value) {
   MachineState::output(port, value);
-  push(new OutputCommand(getNextID(), port, value));
+  push(new OutputCommand(port, value));
 }
 
 
 void LinePlanner::dwell(double seconds) {
   MachineState::dwell(seconds);
-  push(new DwellCommand(getNextID(), seconds));
+  push(new DwellCommand(seconds));
 }
 
 
@@ -293,8 +297,8 @@ void LinePlanner::move(const Axes &target, int axes, bool rapid) {
   }
 
   // Create line command
-  LineCommand *lc = new LineCommand(getNextID(), start, target, feed, rapid,
-                                    seeking, firstMove, config);
+  LineCommand *lc =
+    new LineCommand(start, target, feed, rapid, seeking, firstMove, config);
 
   // Update state
   seeking = false;
@@ -314,7 +318,7 @@ void LinePlanner::move(const Axes &target, int axes, bool rapid) {
 
 void LinePlanner::pause(pause_t type) {
   MachineState::pause(type);
-  push(new PauseCommand(getNextID(), type));
+  push(new PauseCommand(type));
 }
 
 
@@ -373,7 +377,7 @@ void LinePlanner::pushSetCommand(const string &name, const T &_value) {
     }
   }
 
-  push(new SetCommand(getNextID(), name, value));
+  push(new SetCommand(name, value));
 }
 
 
@@ -390,6 +394,7 @@ void LinePlanner::push(PlannerCommand *cmd) {
   // Flush pre-plan queue
   while (flush && !pre.empty()) {
     PlannerCommand *cmd = pre.pop_front();
+    cmd->setID(getNextID());
     cmds.push_back(cmd);
     plan(cmd);
   }
@@ -401,6 +406,7 @@ void LinePlanner::push(PlannerCommand *cmd) {
     pre.push_back(cmd);
 
   else {
+    cmd->setID(getNextID());
     cmds.push_back(cmd);
     plan(cmd);
   }
@@ -439,6 +445,13 @@ double LinePlanner::computeMaxAccel(const Vector3D &v) const {
   for (unsigned axis = 0; axis < 3; axis++)
     if (config.maxAccel[axis] && isfinite(config.maxAccel[axis])) {
       double a = fabs(config.maxAccel[axis] / unit[axis]);
+      if (a < maxAccel) maxAccel = a;
+
+      // Compute implied max accel from max jerk and max velocity
+      double j = fabs(config.maxJerk[axis] / unit[axis]);
+      double v = fabs(config.maxVel[axis] / unit[axis]);
+      a = sqrt(2 * v * j);
+
       if (a < maxAccel) maxAccel = a;
     }
 
@@ -484,7 +497,7 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
   if (M_PI * 0.95 < intersectAngle) return;
 
   // Compute arc between segments given the allowed error
-  double error = config.maxMergeError * 0.99;
+  double error = config.maxBlendError * 0.99;
   double sinHalfAngle = sin(intersectAngle / 2);
   double cosHalfAngle = cos(intersectAngle / 2);
   double radius = error * (sinHalfAngle / (1 - sinHalfAngle));
@@ -497,15 +510,27 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
     radius = error * (sinHalfAngle / (1 - sinHalfAngle));
   }
 
-  if (length < config.minTravel) return;
+  if (std::isnan(length) || length < config.minTravel) return;
 
-  // Delete intervening commands from pre-plan queue
-  while (pre.back() != prev) delete pre.pop_back();
+  // Compute angle of the arc
+  double arcAngle = M_PI - intersectAngle;
+
+  // Arc error cannot be greater than arc radius
+  const double arcError = std::min(config.maxBlendError * 0.01, radius);
+
+  // Compute segments and segment angle
+  unsigned segments = blendSegments(arcError, arcAngle, radius);
+  double segAngle = arcAngle / segments;
+
+  if (!segments) return;
 
   // Get parameters
   Vector3D p = next->start.slice<3>(); // Intersection point
   Vector3D a = -prev->unit.slice<3>(); // Unit vector
   Vector3D b = next->unit.slice<3>();  // Unit vector
+
+  // Delete intervening commands from pre-plan queue
+  while (pre.back() != prev) delete pre.pop_back();
 
   // Adjust move endpoints, must be after getting intersection point above
   vector<LineCommand::Speed> speeds;
@@ -517,16 +542,6 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
   // Scale offsets
   for (unsigned i = 0; i < speeds.size(); i++)
     speeds[i].offset /= 2 * length;
-
-  // Compute angle of the arc
-  double arcAngle = M_PI - intersectAngle;
-
-  // Arc error cannot be greater than arc radius
-  const double arcError = std::min(config.maxMergeError * 0.01, radius);
-
-  // Compute segments and segment angle
-  unsigned segments = blendSegments(arcError, arcAngle, radius);
-  double segAngle = arcAngle / segments;
 
   // Find arc center
   Vector3D q1 = p + a * length;
@@ -543,7 +558,7 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
   double alpha = cos(segAngle / 2);
   double epsilon = 1 + (1 - alpha) / (1 + alpha);
 
-  // Compute arc
+  // Compute arc using SLERP
   Vector3D arcStart = (q1 - center) * epsilon;
   Vector3D arcEnd   = (q2 - center) * epsilon;
   Axes start = prev->target;
@@ -560,14 +575,17 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
 
   for (unsigned i = 0; i < segments; i++) {
     double a = i * segAngle + offsetAngle;
+    Vector3D v;
 
-    Vector3D v = arcStart * (sin(arcAngle - a) / sinAngle) +
-      arcEnd * (sin(a) / sinAngle) + center;
+    if (i == segments - 1) v = next->start.getXYZ(); // Exact end
+    else v = arcStart * (sin(arcAngle - a) / sinAngle) +
+           arcEnd * (sin(a) / sinAngle) + center;
+
     target.setXYZ(v);
 
     LineCommand *lc =
-      new LineCommand(getNextID(), start, target, prev->feed, prev->rapid,
-                      false, false, config);
+      new LineCommand(start, target, prev->feed, prev->rapid, false, false,
+                      config);
 
     lc->targetJunctionVel =
       computeJunctionVelocity(center - v, radius * epsilon);
@@ -598,9 +616,6 @@ void LinePlanner::blend(LineCommand *next, LineCommand *prev,
     LineCommand::Speed s(0, speeds.back().speed);
     next->speeds.insert(next->speeds.begin(), s);
   }
-
-  // Fix planner ID of new move
-  next->setID(getNextID());
 }
 
 
@@ -1015,7 +1030,8 @@ double LinePlanner::peakAccelFromLength(double Vi, double jerk,
   LOG_DEBUG(3, "peakAccelFromLength(" << Vi << ", " << jerk << ", "
             << length << ") = " << Ap);
 
-  if (!isfinite(Ap.real()) || Ap.imag()) THROW("Invalid peak acceleration");
+  if (!isfinite(Ap.real()) || Ap.imag())
+    THROW("Invalid peak acceleration length=" << length);
 
   return Ap.real();
 }
