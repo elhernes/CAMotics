@@ -325,6 +325,11 @@
       <string>&amp;Recent projects</string>
      </property>
     </widget>
+    <widget class="QMenu" name="menu_examples">
+     <property name="title">
+      <string>&amp;Examples</string>
+     </property>
+    </widget>
     <addaction name="actionNew"/>
     <addaction name="actionOpen"/>
     <addaction name="actionAddFile"/>
@@ -335,7 +340,7 @@
     <addaction name="actionSaveFileAs"/>
     <addaction name="actionRevertFile"/>
     <addaction name="separator"/>
-    <addaction name="actionExamples"/>
+    <addaction name="menu_examples"/>
     <addaction name="separator"/>
     <addaction name="menuRecent_projects"/>
     <addaction name="separator"/>

@@ -384,21 +384,19 @@ void QtWin::loadExamples() {
 
         if (examples.empty()) continue;
 
-        QMenu *menu = new QMenu;
-
-        ui->actionExamples->setMenu(menu);
-        ui->actionExamples->setEnabled(true);
-
         examples_t::iterator it;
         for (it = examples.begin(); it != examples.end(); it++) {
           string name = it->first;
           string path = it->second;
 
-          QAction *action = menu->addAction(QString::fromUtf8(name.c_str()));
-          action->setToolTip(QString::fromUtf8(path.c_str()));
+          QAction *action = ui->menu_examples->addAction(QString::fromUtf8(name.c_str()));
+	  LOG_INFO(1, "example(" << name << ") (act " << action << ")");
+
+	  action->setToolTip(QString::fromUtf8(path.c_str()));
           connect(action, SIGNAL(triggered()), this,
                   SLOT(on_actionExamples_triggered()));
         }
+
 
         break;
       }
