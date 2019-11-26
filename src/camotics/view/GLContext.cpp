@@ -94,12 +94,15 @@ void GLContext::popMatrix() {
 
 void GLContext::logErrors() {
   GLenum err;
-
+#ifdef GL_CONTEXT_LOST
   do {
     err = glGetError();
     if (err == GL_NO_ERROR) break;
     LOG_ERROR("GL error: " << err << ": " << glErrorString(err));
   } while (err != GL_CONTEXT_LOST);
+#else
+    err = glGetError();
+#endif
 }
 
 
