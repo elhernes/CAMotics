@@ -47,7 +47,9 @@ void GLScene::glInit() {
 
   // OpenGL config
   gl.glEnable(GL_DEPTH_TEST);
+#ifdef GL_LINE_SMOOTH
   gl.glEnable(GL_LINE_SMOOTH);
+#endif
   gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   gl.glEnable(GL_BLEND);
   gl.glLineWidth(1);
