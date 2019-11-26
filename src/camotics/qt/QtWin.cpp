@@ -290,17 +290,18 @@ void QtWin::loadMachines() {
   try {
     const char *paths[] = {
       "/usr/share/doc/camotics/machines",
-      "../SharedSupport/machines",
+      "SharedSupport/machines",
       "machines",
       0
     };
 
     string root = ".";
     string appPath = QCoreApplication::applicationFilePath().toUtf8().data();
+    LOG_WARNING("app-path: " << appPath);
     if (appPath.empty()) LOG_WARNING("Couldn't get application path");
     else root = SystemUtilities::dirname(appPath);
 
-    for (const char **p = paths; *p; p++) {
+      for (const char **p = paths; *p; p++) {
       string path = *p;
       if (path[0] != '/') path = root + "/" + path;
 
@@ -310,6 +311,7 @@ void QtWin::loadMachines() {
 
         while (walker.hasNext()) {
           string filename = walker.next();
+	  LOG_WARNING("machine-walker: " << filename);
 
           try {
             SmartPointer<JSON::Value> data = JSON::Reader::parse(filename);
@@ -346,7 +348,7 @@ void QtWin::loadExamples() {
   try {
     const char *paths[] = {
       "/usr/share/doc/camotics/examples",
-      "../SharedSupport/examples",
+      "SharedSupport/examples",
       "examples",
       0
     };
@@ -371,11 +373,13 @@ void QtWin::loadExamples() {
           string dirname = SystemUtilities::dirname(filename);
           string basename = SystemUtilities::basename(filename);
           string name = SystemUtilities::splitExt(basename)[0];
-
-          if (String::endsWith(dirname, "/" + name)) {
+	  LOG_INFO(1, "(ex " << filename << ")");
+	  if (String::endsWith(dirname, "/" + name)) {
             name = String::trim(name);
             name = String::transcode(name, "_-", "  ");
             name = String::capitalize(name);
+
+	    LOG_INFO(1, name << "(fn " << filename << ") (dn " << dirname << ") (bn " << basename << ")");
 
             examples[name] = filename;
             if (name == "Camotics") defaultExample = filename;

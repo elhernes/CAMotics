@@ -84,11 +84,11 @@ if not env.GetOption('clean'):
 
     if env['PLATFORM'] != 'win32': env.AppendUnique(CCFLAGS = ['-fPIC'])
 
-    if env['with_tpl']:
-        if not (env.CBConfigEnabled('chakra') or env.CBConfigEnabled('v8')):
-            raise Exception(
-                'Chakra or V8 support is required, please rebuild C! You may '
-                'need to set CHAKRA_CORE_HOME or V8_HOME.')
+#    if env['with_tpl']:
+#        if not (env.CBConfigEnabled('chakra') or env.CBConfigEnabled('v8')):
+#            raise Exception(
+#                'Chakra or V8 support is required, please rebuild C! You may '
+#                'need to set CHAKRA_CORE_HOME or V8_HOME.')
 
     if env['with_gui']:
         # Qt
