@@ -35,13 +35,30 @@ namespace CAMotics {
 }
 
 
+#ifdef __APPLE__
+#include "TargetConditionals.h"
+#endif
+
 GLShader::GLShader(const string &source, int type) {
   GLContext gl;
   shader = gl.glCreateShader((GLenum)type);
   if (!shader) THROW("Failed to create GL shader");
 
+
   // Load source
-  const GLchar *str = (const GLchar *)source.c_str();
+  std::string src;
+
+  // prepend precision def for iOS
+#ifdef __APPLE__
+#if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
+  src += "precision highp float;\n";
+#elif TARGET_OS_MAC
+// Other kinds of Mac OS
+#endif
+#endif // __APPLE__
+
+  src += source;
+  const GLchar *str = (const GLchar *)src.c_str();
   gl.glShaderSource(shader, 1, &str, 0);
 
   // Compile

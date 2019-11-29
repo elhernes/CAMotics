@@ -54,6 +54,20 @@
 
 #include <vector>
 
+#ifdef __APPLE__
+#include "TargetConditionals.h"
+#endif
+
+#ifdef __APPLE__
+#if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
+#define SHARED_SUPPORT "SharedSupport"
+#endif // IOS
+#endif // APPLE
+
+#ifndef SHARED_SUPPORT
+#define SHARED_SUPPORT "../SharedSupport"
+#endif
+
 using namespace std;
 using namespace cb;
 using namespace CAMotics;
@@ -290,7 +304,7 @@ void QtWin::loadMachines() {
   try {
     const char *paths[] = {
       "/usr/share/doc/camotics/machines",
-      "SharedSupport/machines",
+      SHARED_SUPPORT "/machines",
       "machines",
       0
     };
@@ -348,7 +362,7 @@ void QtWin::loadExamples() {
   try {
     const char *paths[] = {
       "/usr/share/doc/camotics/examples",
-      "SharedSupport/examples",
+      SHARED_SUPPORT "/examples",
       "examples",
       0
     };
