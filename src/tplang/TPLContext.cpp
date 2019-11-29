@@ -57,6 +57,7 @@ TPLContext::TPLContext(const SmartPointer<ostream> &stream,
   string exeDir =
     SystemUtilities::dirname(SystemUtilities::getExecutablePath());
   addSearchPaths(exeDir + "/tpl_lib");
+
   addSearchPaths("/usr/share/camotics/tpl_lib");
 #ifdef __APPLE__
   addSearchPaths(exeDir + "/../Resources/tpl_lib");

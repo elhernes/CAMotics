@@ -39,7 +39,7 @@ namespace CAMotics {
     GCode::Units defaultUnits = GCode::Units::METRIC;
     double maxArcError = 0.01;
     bool linearize = false;
-    bool jsonOut = false;
+    std::string outFormat = "gcode";
     int jsonPrecision = 3;
     bool jsonLocation = false;
 

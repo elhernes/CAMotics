@@ -25,6 +25,7 @@
 #include <gcode/machine/MachineUnitAdapter.h>
 #include <gcode/machine/GCodeMachine.h>
 #include <gcode/machine/JSONMachineWriter.h>
+#include <gcode/machine/DynaMachine.h>
 
 #include <cbang/config/MinConstraint.h>
 #include <cbang/os/SystemUtilities.h>
@@ -68,7 +69,7 @@ CommandLineApp::CommandLineApp(const string &name, hasFeature_t hasFeature) :
   cmdLine.addTarget("linearize", linearize,
                     "Convert all moves to straight line movements.");
 
-  cmdLine.addTarget("json-out", jsonOut, "Output in JSON format.");
+  cmdLine.addTarget("out-format", outFormat, "Output in JSON format.");
   cmdLine.addTarget("json-precision", jsonPrecision,
                     "JSON output numerical precision.");
   cmdLine.addTarget("json-location", jsonLocation,
@@ -123,10 +124,12 @@ void CommandLineApp::run() {
 void CommandLineApp::build(GCode::MachinePipeline &pipeline) {
   pipeline.add(new MachineUnitAdapter(defaultUnits, outputUnits));
   if (linearize) pipeline.add(new MachineLinearizer);
-  if (jsonOut) pipeline.add(new JSONMachineWriter
-                            (*stream, outputUnits, jsonLocation, 0, false, 2,
-                             jsonPrecision));
+  if (outFormat == "json") pipeline.add(new JSONMachineWriter
+					(*stream, outputUnits, jsonLocation, 0, false, 2,
+					 jsonPrecision));
+  else if (outFormat == "dynalang") pipeline.add(new DynaMachine(stream, outputUnits));
   else pipeline.add(new GCodeMachine(stream, outputUnits));
+
   pipeline.add(new MachineState);
 
   pipeline.set("_max_arc_error", maxArcError, outputUnits);
